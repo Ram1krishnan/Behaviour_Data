@@ -81,10 +81,12 @@ Answer in a clear, structured and helpful way that makes it easy to understand t
     });
 
     if (taskDescription || taskName) {
-      const taskContext = `Task context:
+      const taskContext = `Task context (for your reference only):
 - Task ID: ${taskID}
-- Task Name: ${taskName || 'N/A'}
-- Task Description / Question: ${taskDescription || 'N/A'}`;
+- Task name: ${taskName || 'N/A'}
+- Instructions shown to the user: ${taskDescription || 'N/A'}
+
+The user was shown the instructions above. The next message from the user is their own prompt. You must respond to that prompt directly: do what they ask (e.g. if they ask for a summary, provide the summary; if they ask for an explanation, explain; if they ask for code, provide the code). Do not generate a prompt or meta-instructions—only perform the task they are asking for.`;
 
       contents.push({
         role: 'user',
