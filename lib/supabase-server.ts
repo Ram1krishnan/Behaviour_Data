@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 // Monkey patch DNS to bypass ISP DNS hijacking (e.g. for users in India)
 const originalLookup = dns.lookup;
 
-dns.lookup = (hostname: string, options: any, callback: any) => {
+const patchedLookup = ((hostname: string, options: any, callback: any) => {
   if (typeof options === 'function') {
     callback = options;
     options = {};
@@ -18,7 +18,12 @@ dns.lookup = (hostname: string, options: any, callback: any) => {
   }
 
   return originalLookup(hostname, options, callback);
-};
+}) as typeof dns.lookup;
+
+// Preserve Node's promisified lookup helper to satisfy types
+(patchedLookup as any).__promisify__ = (originalLookup as any).__promisify__;
+
+dns.lookup = patchedLookup;
 
 const supabaseUrl =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;

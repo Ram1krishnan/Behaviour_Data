@@ -13,7 +13,9 @@ export async function POST(req: Request) {
       return Response.json({ error: error.message }, { status: 500 });
     }
 
-    const taskIds = data ? [...new Set(data.map((p) => p.task_id))] : [];
+    const taskIds = data
+      ? Array.from(new Set(data.map((p: any) => p.task_id)))
+      : [];
     return Response.json({ data: taskIds });
   } catch (err) {
     return Response.json(
