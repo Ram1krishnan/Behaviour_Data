@@ -6,9 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
-import { Task, Prompt, Message } from '@/lib/types';
+import { Task, Message } from '@/lib/types';
 import { ArrowRight, Loader2, User, Bot } from 'lucide-react';
+
+/** Formats task description: literal \n -> line breaks, **bold** -> <strong>, escape HTML for safety */
+function formatTaskDescription(desc: string): string {
+  if (!desc) return '';
+  let text = desc.replace(/\\n/g, '\n');
+  text = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/\n/g, '<br />');
+  return text;
+}
 
 export default function TaskPage() {
   const router = useRouter();
@@ -39,32 +52,27 @@ export default function TaskPage() {
     if (!mounted || userLoading || !userID) return;
 
     const loadTask = async () => {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', taskId)
-        .single();
-
-      if (error || !data) {
-        // Temporary logging to help debug why the task is not loading
-        console.error('Error loading task', { error, data, taskId });
-        return;
+      const res = await fetch('/api/get-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId }),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setTask(result.data);
       }
-
-      setTask(data);
     };
 
     const loadPrompts = async () => {
-      const { data } = await supabase
-        .from('prompts')
-        .select('*')
-        .eq('user_id', userID)
-        .eq('task_id', taskId)
-        .order('turn_number', { ascending: true });
-
-      if (data && data.length > 0) {
+      const res = await fetch('/api/get-prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userID, taskId }),
+      });
+      const result = await res.json();
+      if (result.data) {
         const loadedMessages: Message[] = [];
-        data.forEach((prompt) => {
+        result.data.forEach((prompt: { prompt_text: string; response_text: string; created_at: string }) => {
           loadedMessages.push({
             role: 'user',
             text: prompt.prompt_text,
@@ -82,14 +90,14 @@ export default function TaskPage() {
     };
 
     const loadCompletedTasks = async () => {
-      const { data } = await supabase
-        .from('prompts')
-        .select('task_id')
-        .eq('user_id', userID);
-
-      if (data) {
-        const completed = new Set(data.map((p) => p.task_id));
-        setCompletedTasks(completed);
+      const res = await fetch('/api/get-completed-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userID }),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setCompletedTasks(new Set(result.data));
       }
     };
 
@@ -109,24 +117,20 @@ export default function TaskPage() {
         text: msg.text,
       }));
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-response`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({
-            userID,
-            taskID: taskId,
-            prompt: currentPrompt,
-            taskDescription: task.description,
-            taskName: task.name,
-            conversationHistory,
-          }),
-        }
-      );
+      const response = await fetch('/api/generate-response', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userID,
+          taskID: taskId,
+          prompt: currentPrompt,
+          taskDescription: task.description,
+          taskName: task.name,
+          conversationHistory,
+        }),
+      });
 
       const result = await response.json();
 
@@ -228,7 +232,12 @@ export default function TaskPage() {
           <CardContent className="pt-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-slate-900 mb-2">Task Instructions</h3>
-              <p className="text-slate-700 whitespace-pre-wrap">{task.description}</p>
+              <div
+                className="text-slate-700 [&_strong]:font-semibold [&_br]:block"
+                dangerouslySetInnerHTML={{
+                  __html: formatTaskDescription(task.description),
+                }}
+              />
             </div>
           </CardContent>
         </Card>
